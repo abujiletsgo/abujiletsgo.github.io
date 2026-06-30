@@ -1,0 +1,6 @@
+# Deploy hygiene — keep hook/tooling scratch out of the Pages repo
+.claude/
+.gstack/
+*.log
+terminal-internal-token
+.DS_Store
