@@ -82,8 +82,8 @@ precision highp float;
 
 uniform sampler2D uTexture;
 uniform float uTime;
-uniform vec2 uRippleCenter;
-uniform float uRippleStrength;
+uniform vec2 uRippleCenter;     // pointer / touch position (0..1, y up)
+uniform float uRippleStrength;  // decaying touch energy (~0..0.03)
 uniform float uScrollAmp;
 uniform float uImageAspect;
 uniform float uViewAspect;
@@ -97,51 +97,44 @@ float hash(vec2 p) {
   return fract(p.x * p.y);
 }
 
-float noise(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(
-    mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
-    mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
-    f.y
-  );
-}
-
 void main() {
   vec2 screenUV = vUv;
 
-  // Object-fit: cover mapping — keeps image centered, fills viewport
+  // Object-fit: cover mapping — keeps subject centered, fills viewport
   vec2 imgUV = screenUV;
   float vA = uViewAspect;
   float iA = uImageAspect;
   if (iA > vA) {
-    // Image is wider than viewport: crop sides
     float s = vA / iA;
     imgUV.x = (screenUV.x - 0.5) * s + 0.5;
   } else {
-    // Image is taller than viewport: crop top/bottom
     float s = iA / vA;
     imgUV.y = (screenUV.y - 0.5) * s + 0.5;
   }
 
-  // Low-frequency noise drift (idle "breathing", amplitude ~0.004)
-  float t = uTime * 0.15;
-  float n1 = noise(screenUV * 2.5 + vec2(t * 0.7, t * 0.4));
-  float n2 = noise(screenUV * 2.5 + vec2(t * 0.4 + 4.3, t * 0.6 + 1.7));
-  vec2 drift = (vec2(n1, n2) - 0.5) * 0.008;
+  // Whisper of parallax: the whole frame eases toward the touch + a slow idle
+  // sway. Uniform translation only — never a localized warp.
+  vec2 toPoint = uRippleCenter - vec2(0.5);
+  vec2 parallax = toPoint * 0.010;
+  parallax += vec2(sin(uTime * 0.22), cos(uTime * 0.18)) * 0.0035;
+  parallax.y += clamp(uScrollAmp * 0.06, 0.0, 0.02);
 
-  // Pointer/touch ripple — gaussian falloff from touch point (amplitude ~0.03)
-  vec2 toPoint = screenUV - uRippleCenter;
-  float dist = length(toPoint);
-  float rippleMag = uRippleStrength * exp(-dist * dist * 25.0);
-  vec2 ripple = dist > 0.001 ? normalize(toPoint) * rippleMag : vec2(0.0);
+  vec3 col = texture2D(uTexture, imgUV + parallax).rgb;
 
-  // Scroll velocity scales total displacement amplitude (clamped)
-  float scrollScale = 1.0 + clamp(uScrollAmp * 0.4, 0.0, 2.0);
-  vec2 offset = (drift + ripple) * scrollScale;
+  // Soft warm light-sheen that follows the finger (additive, gaussian, decays)
+  float d = distance(screenUV, uRippleCenter);
+  float sheen = uRippleStrength * 4.0 * exp(-d * d * 11.0);
+  col += sheen * vec3(1.0, 0.96, 0.90);
 
-  gl_FragColor = texture2D(uTexture, imgUV + offset);
+  // Editorial vignette — gently darkens the frame edges (also lifts text legibility)
+  float vig = smoothstep(0.95, 0.40, distance(screenUV, vec2(0.5)));
+  col *= mix(0.86, 1.0, vig);
+
+  // Fine film grain — subtle, animated, keeps it from looking too clean / CGI
+  float g = hash(screenUV * vec2(uViewAspect, 1.0) * 760.0 + fract(uTime) * 91.7);
+  col += (g - 0.5) * 0.026;
+
+  gl_FragColor = vec4(col, 1.0);
 }
 `;function Nm(){const[e,t]=k.useState(()=>typeof window>"u"?!1:window.matchMedia("(prefers-reduced-motion: reduce)").matches);return k.useEffect(()=>{const n=window.matchMedia("(prefers-reduced-motion: reduce)"),r=i=>t(i.matches);return n.addEventListener("change",r),()=>n.removeEventListener("change",r)},[]),e}const Om="/assets/hero-editorial.mp4",ku="/assets/hero-kpop.png";function Im(){const e=k.useRef(null),t=k.useRef(null),n=k.useRef(null),[r,i]=k.useState(!1),[l,s]=k.useState(!1),[o,a]=k.useState(!1),c=Nm();k.useEffect(()=>{if(c)return;const d=n.current;if(!d)return;d.muted=!0,d.defaultMuted=!0,d.setAttribute("muted","");const h=()=>{const y=d.play();y&&typeof y.catch=="function"&&y.catch(()=>{})};h();const v=()=>{h(),window.removeEventListener("touchstart",v),window.removeEventListener("pointerdown",v)};return window.addEventListener("touchstart",v,{passive:!0}),window.addEventListener("pointerdown",v,{passive:!0}),()=>{window.removeEventListener("touchstart",v),window.removeEventListener("pointerdown",v)}},[c]),k.useEffect(()=>{const d=()=>{window.scrollY>10&&a(!0)};return window.addEventListener("scroll",d,{passive:!0}),()=>window.removeEventListener("scroll",d)},[]),k.useEffect(()=>{var Oo;if(c)return;const d=t.current,h=e.current;if(!d||!h)return;let v;try{v=new pg({canvas:d,dpr:Math.min(window.devicePixelRatio,2),alpha:!1,antialias:!1})}catch{i(!0);return}if(!v.gl){i(!0);return}const y=v.gl,x=new pm(y,{generateMipmaps:!1,width:2,height:2}),w=n.current;let p=!1,g=!1;const m=new Mm(y),S=new Fo(.5,.5),E=new ug(y,{vertex:Fm,fragment:Am,uniforms:{uTexture:{value:x},uTime:{value:0},uRippleCenter:{value:S},uRippleStrength:{value:0},uScrollAmp:{value:0},uImageAspect:{value:1},uViewAspect:{value:h.offsetWidth/h.offsetHeight}}}),C=E.program;if(C&&!y.getProgramParameter(C,y.LINK_STATUS)){i(!0),(Oo=y.getExtension("WEBGL_lose_context"))==null||Oo.loseContext();return}const _=new fm(y,{geometry:m,program:E}),j=()=>{const X=h.offsetWidth,he=h.offsetHeight;v.setSize(X,he),E.uniforms.uViewAspect.value=X/he};j();const R=new ResizeObserver(j);R.observe(h);const T=()=>{!w||p||w.videoWidth!==0&&(p=!0,x.image=w,E.uniforms.uImageAspect.value=w.videoWidth/w.videoHeight)};if(w){w.addEventListener("loadeddata",T),w.addEventListener("canplay",T);const X=w.play();X&&typeof X.catch=="function"&&X.catch(()=>{}),T()}else i(!0);let F=0,B=window.scrollY,W=performance.now();const N=()=>{const X=performance.now(),he=Math.max(1,X-W),tn=Math.abs(window.scrollY-B);F=Math.min(tn/he*16,5),B=window.scrollY,W=X};window.addEventListener("scroll",N,{passive:!0});let Ne=0;const An=.03,en=600,L=X=>{const he=h.getBoundingClientRect();S.set((X.clientX-he.left)/he.width,1-(X.clientY-he.top)/he.height),Ne=performance.now()};h.addEventListener("pointermove",L,{passive:!0});const O=X=>{if(!X.touches.length)return;const he=X.touches[0],tn=h.getBoundingClientRect();S.set((he.clientX-tn.left)/tn.width,1-(he.clientY-tn.top)/tn.height),Ne=performance.now()};h.addEventListener("touchmove",O,{passive:!0});let A=null,$=!0,q=document.hidden;const Pt=X=>{A=requestAnimationFrame(Pt),p&&w&&w.readyState>=2&&(x.needsUpdate=!0,g||(g=!0,s(!0))),F*=.92,E.uniforms.uScrollAmp.value=F;const he=performance.now()-Ne;E.uniforms.uRippleStrength.value=he<en?An*(1-he/en):0,E.uniforms.uTime.value=X*.001,v.render({scene:_})},Oe=()=>{A===null&&(A=requestAnimationFrame(Pt))},Ft=()=>{A!==null&&(cancelAnimationFrame(A),A=null)},He=new IntersectionObserver(([X])=>{$=X.isIntersecting,$&&!q?Oe():Ft()},{threshold:0});He.observe(h);const At=()=>{q=document.hidden,q?Ft():$&&Oe()};return document.addEventListener("visibilitychange",At),Oe(),()=>{Ft(),He.disconnect(),R.disconnect(),window.removeEventListener("scroll",N),document.removeEventListener("visibilitychange",At),h.removeEventListener("pointermove",L),h.removeEventListener("touchmove",O),w&&(w.removeEventListener("loadeddata",T),w.removeEventListener("canplay",T));const X=y.getExtension("WEBGL_lose_context");X==null||X.loseContext()}},[c]);const f=c;return u.jsxs("div",{ref:e,style:{position:"relative",width:"100%",height:"100dvh",overflow:"hidden",backgroundColor:"var(--ink)"},children:[u.jsx("img",{src:ku,alt:"saeco SS26 Campaign","aria-hidden":"true",style:{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",objectPosition:"center",display:"block"}}),!f&&u.jsx("video",{ref:n,src:Om,autoPlay:!0,muted:!0,loop:!0,playsInline:!0,preload:"auto",poster:ku,style:{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}}),!f&&u.jsx("canvas",{ref:t,style:{position:"absolute",inset:0,width:"100%",height:"100%",opacity:l&&!r?1:0,transition:"opacity 600ms var(--ease-out)",display:r?"none":"block"}}),u.jsx("div",{"aria-hidden":"true",style:{position:"absolute",inset:0,background:"linear-gradient(to bottom, rgba(10,8,6,0.52) 0%, rgba(10,8,6,0.0) 32%), linear-gradient(to top, rgba(10,8,6,0.62) 0%, rgba(10,8,6,0.0) 45%)",pointerEvents:"none"}}),u.jsxs("div",{style:{position:"absolute",inset:0,display:"flex",flexDirection:"column",justifyContent:"space-between",pointerEvents:"none"},children:[u.jsx("div",{style:{paddingTop:"max(28px, env(safe-area-inset-top, 20px))",paddingLeft:"var(--edge)",paddingRight:"var(--edge)",textAlign:"center"},children:u.jsx("span",{className:"wordmark",style:{color:"var(--surface)"},children:"SAECO"})}),u.jsxs("div",{style:{paddingBottom:"max(56px, calc(env(safe-area-inset-bottom, 0px) + 40px))",paddingLeft:"var(--edge)",paddingRight:"var(--edge)",display:"flex",flexDirection:"column",alignItems:"center",gap:14,textAlign:"center"},children:[u.jsx("p",{className:"label",style:{color:"var(--surface)",opacity:.85},children:P.heroTagline}),u.jsx(ot,{to:"/c/women",className:"label",style:{color:"var(--surface)",textDecoration:"underline",textUnderlineOffset:"4px",pointerEvents:"auto"},children:P.heroCta}),u.jsxs("div",{"aria-hidden":"true",style:{display:"flex",flexDirection:"column",alignItems:"center",gap:5,marginTop:4,opacity:o?0:.65,transition:"opacity 600ms var(--ease-out)"},children:[u.jsx("span",{className:"label",style:{color:"var(--surface)",fontSize:"10px",letterSpacing:"0.15em"},children:"SCROLL"}),u.jsx("svg",{width:"14",height:"9",viewBox:"0 0 14 9",fill:"none","aria-hidden":"true",children:u.jsx("path",{d:"M1 1l6 6 6-6",stroke:"var(--surface)",strokeWidth:"1.5",strokeLinecap:"round",strokeLinejoin:"round"})})]})]})]})]})}const Eu=P.marquee.join(" · ")+"  ·  ";function bm(){return k.useEffect(()=>{const e="saeco-marquee-styles";if(document.getElementById(e))return;const t=document.createElement("style");return t.id=e,t.textContent=`
       @keyframes saeco-marquee-scroll {
